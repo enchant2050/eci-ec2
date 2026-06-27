@@ -9,10 +9,27 @@ ENV_PREFIX="$RUNTIME_DIR/envs/eci-ocr"
 cd "$APP_DIR"
 
 if command -v dnf >/dev/null 2>&1; then
-  sudo dnf install -y \
-    curl tar bzip2 gzip xz \
-    gcc gcc-c++ make \
-    libgomp
+  if command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y \
+        tar \
+        bzip2 \
+        gzip \
+        xz \
+        gcc \
+        gcc-c++ \
+        make \
+        libgomp
+elif command -v yum >/dev/null 2>&1; then
+    sudo yum install -y \
+        tar \
+        bzip2 \
+        gzip \
+        xz \
+        gcc \
+        gcc-c++ \
+        make \
+        libgomp
+fi
 elif command -v yum >/dev/null 2>&1; then
   sudo yum install -y \
     curl tar bzip2 gzip xz \
@@ -46,8 +63,8 @@ else
 fi
 
 export PATH="$ENV_PREFIX/bin:$PATH"
-python -m pip install --upgrade pip wheel
-python -m pip install -r requirements.txt
+python -m pip install --upgrade pip wheel setuptools
+python -m pip install --no-cache-dir -r requirements.txt
 
 tesseract --version
 pdftoppm -v

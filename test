@@ -1,0 +1,175 @@
+Done. I created the new EC2 project here:
+/Users/enchant/Desktop/eci-ec2-new
+What’s inside:
+EC2/manual runner: src/ec2_runner.py
+Run script: scripts/run_pdf.sh
+Amazon Linux bootstrap: scripts/bootstrap_ec2.sh
+GitHub Actions auto deploy: .github/workflows/deploy-ec2.yml
+Clean EC2 dependencies in requirements.txt
+No Lambda, no Terraform, no layer zips
+To push it:
+cd /Users/enchant/Desktop/eci-ec2-new
+git init
+git add .
+git commit -m "Initial EC2 OCR project"
+git branch -M main
+git remote add origin YOUR_GITHUB_REPO_URL
+git push -u origin main
+Add these GitHub repo secrets:
+EC2_HOST      = your EC2 public IP/DNS
+EC2_USER      = ec2-user
+EC2_SSH_KEY   = private key content
+EC2_PORT      = 22
+APP_DIR       = /opt/eci-ocr
+Then every push to main deploys to EC2.
+To run manually on EC2:
+ssh ec2-user@YOUR_EC2_HOST
+cd /opt/eci-ocr
+cp your.pdf inputs/
+scripts/run_pdf.sh inputs/your.pdf
+Output goes to:
+outputs/your_result.json
+For database insert:
+export DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/DBNAME'
+scripts/run_pdf.sh inputs/your.pdf
+One important EC2 note: port 22 must allow GitHub Actions to SSH into the instance, and the instance needs outbound internet for dnf/pip during deploy.
+
+README.mdDocument · MDOpen previewOpen in
+
+Edited 11 files+286-237Review changesUndoReview
+
+.ec2_new_project/.env.example.ec2_new_project/.env.example+6-0
+.ec2_new_project/.github/workflows/deploy-ec2.yml.ec2_new_project/.github/workflows/deploy-ec2.yml+61-0
+.ec2_new_project/.gitignore.ec2_new_project/.gitignore+14-0
+Show 8 more files
+
+
+
+3:50 AM
+
+
+
+
+
+
+Error: Unable to find a match: tesseract
+Error: Process completed with exit code 1. in github actions
+
+
+
+4:19 AM
+
+
+
+
+
+
+Worked for 3m 24s
+
+
+
+Fixed it in /Users/enchant/Desktop/eci-ec2-new.
+The GitHub Actions error happened because Amazon Linux couldn’t find an OS package named tesseract. I changed the EC2 bootstrap so it no longer installs Tesseract from dnf/yum. It now creates a local .runtime environment using micromamba/conda-forge and installs:
+python=3.11
+pip
+tesseract
+poppler
+Updated:
+scripts/bootstrap_ec2.sh
+scripts/run_pdf.sh
+.github/workflows/deploy-ec2.yml
+.gitignore
+README.md
+Push the updated project again:
+cd /Users/enchant/Desktop/eci-ec2-new
+git add .
+git commit -m "Use conda-forge runtime for EC2 OCR tools"
+git push
+Then rerun the GitHub Actions deploy. It should get past the Unable to find a match: tesseract error now.
+
+README.mdDocument · MDOpen previewOpen in
+
+Edited 5 files+50-13Review changesUndoReview
+
+.ec2_new_project/.github/workflows/deploy-ec2.yml.ec2_new_project/.github/workflows/deploy-ec2.yml+1-0
+.ec2_new_project/.gitignore.ec2_new_project/.gitignore+1-0
+.ec2_new_project/README.md.ec2_new_project/README.md+2-3
+Show 2 more files
+
+
+
+4:23 AM
+
+
+
+
+
+
+git push --set-upstream origin main
+To https://github.com/enchant2050/eci-ec2.git
+ ! [rejected]        main -> main (fetch first)
+error: failed to push some refs to 'https://github.com/enchant2050/eci-ec2.git'
+hint: Updates were rejected because the remote contains work that you do not
+hint: have locally. This is usually caused by another repository pushing to
+hint: the same ref. If you want to integrate the remote changes, use
+hint: 'git pull' before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+enchant@enchant eci-ec2-new % git pull
+remote: Enumerating objects: 33, done.
+remote: Counting objects: 100% (33/33), done.
+remote: Compressing objects: 100% (31/31), done.
+remote: Total 33 (delta 0), reused 33 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (33/33), 19.38 KiB | 992.00 KiB/s, done.
+From https://github.com/enchant2050/eci-ec2
+ * [new branch]      main       -> origin/main
+There is no tracking information for the current branch.
+Please specify which branch you want to merge with.
+See git-pull(1) for details.
+
+    git pull <remote> <branch>
+
+If you wish to set tracking information for this branch you can do so with:
+
+    git branch --set-upstream-to=origin/<branch> main
+
+Show less
+
+4:26 AM
+
+
+
+
+
+
+You’re very close. The remote already has a main branch, and your local main doesn’t yet track it, so Git doesn’t know what to pull/merge. I’ll inspect the Desktop repo state and then give you the safest command sequence.
+
+
+
+
+Ran 3 commands
+
+
+Worked for 1m 13s
+
+
+
+
+Good news: your local main is already based on origin/main and is just one commit ahead, so no merge is needed. I’m going to set the upstream tracking branch, then push that one commit.
+
+
+
+
+Ran a commandRan git branch --set-upstream-to=origin/main main
+
+
+
+
+
+
+
+
+
+
+
+
+You've hit your usage limit. Upgrade your plan to continue, or try again at Jul 28, 2026, 3:27 AM.
