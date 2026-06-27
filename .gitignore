@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+.runtime/
+.env
+inputs/
+outputs/
+logs/
+*.zip
+*.tar
+*.tgz
