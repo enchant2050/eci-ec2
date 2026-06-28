@@ -15,7 +15,9 @@ class ImageProcessor:
     def convert_pdf_to_images(
         pdf_path: str,
         output_dir: str,
-        dpi: int = 600
+        dpi: int = 600,
+        first_page: Optional[int] = None,
+        last_page: Optional[int] = None,
     ) -> List[str]:
         """
         Convert PDF to high-resolution JPEG images using pdf2image
@@ -24,6 +26,8 @@ class ImageProcessor:
             pdf_path: Path to input PDF
             output_dir: Directory to save images
             dpi: Resolution in DPI
+            first_page: Optional first 1-indexed PDF page to convert
+            last_page: Optional last 1-indexed PDF page to convert
             
         Returns:
             List of output image paths
@@ -33,16 +37,30 @@ class ImageProcessor:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        images = convert_from_path(pdf_path, dpi=dpi)
+        images = convert_from_path(
+            pdf_path,
+            dpi=dpi,
+            first_page=first_page,
+            last_page=last_page,
+        )
         output_paths = []
+        page_offset = first_page or 1
         
-        for i, image in enumerate(images, 1):
+        for i, image in enumerate(images, page_offset):
             output_path = output_dir / f"page_{i:04d}.jpg"
             image.save(str(output_path), "JPEG", quality=95)
             output_paths.append(str(output_path))
             
         logger.info(f"Converted PDF to {len(images)} images at {dpi} DPI")
         return output_paths
+
+    @staticmethod
+    def get_pdf_page_count(pdf_path: str) -> int:
+        """Return total pages without rasterizing the PDF."""
+        from pdf2image import pdfinfo_from_path
+
+        info = pdfinfo_from_path(pdf_path)
+        return int(info["Pages"])
     
     @staticmethod
     def deskew(image: np.ndarray) -> np.ndarray:

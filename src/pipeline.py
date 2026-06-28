@@ -80,37 +80,41 @@ class OCRPipeline:
         json_logger.info(f"Starting PDF processing: {pdf_name}")
         
         try:
-            # Step 1: Convert PDF to images
-            json_logger.info("Converting PDF to images...")
-            pages_dir = work_dir / "pages"
-            image_paths = ImageProcessor.convert_pdf_to_images(
-                str(pdf_path),
-                str(pages_dir),
-                dpi=600
-            )
-            results['total_pages'] = len(image_paths)
+            total_pages = ImageProcessor.get_pdf_page_count(str(pdf_path))
+            results['total_pages'] = total_pages
 
             effective_start_page = start_page
             effective_end_page = end_page
             if not all_pages:
-                if effective_start_page is None and len(image_paths) > 2:
+                if effective_start_page is None and total_pages > 2:
                     effective_start_page = 3
-                if effective_end_page is None and len(image_paths) > 3:
-                    effective_end_page = len(image_paths) - 1
+                if effective_end_page is None and total_pages > 3:
+                    effective_end_page = total_pages - 1
 
             results['start_page'] = effective_start_page or 1
-            results['end_page'] = effective_end_page or len(image_paths)
+            results['end_page'] = effective_end_page or total_pages
+
+            # Step 1: Convert only the selected PDF pages to images. This is
+            # critical on EC2 because 600 DPI full-PDF rasterization is slow.
+            json_logger.info(
+                "Converting PDF to images...",
+                start_page=results['start_page'],
+                end_page=results['end_page'],
+            )
+            pages_dir = work_dir / "pages"
+            image_paths = ImageProcessor.convert_pdf_to_images(
+                str(pdf_path),
+                str(pages_dir),
+                dpi=600,
+                first_page=results['start_page'],
+                last_page=results['end_page'],
+            )
             
             # Step 2-5: Process voter-list pages by default. Electoral roll
             # PDFs usually have cover/map pages before records and a summary
             # page at the end; use all_pages or explicit ranges to override.
-            for page_num, image_path in enumerate(image_paths):
-                page_number = page_num + 1
-                if effective_start_page and page_number < effective_start_page:
-                    continue
-                if effective_end_page and page_number > effective_end_page:
-                    continue
-                
+            for image_path in image_paths:
+                page_number = int(Path(image_path).stem.rsplit("_", 1)[1])
                 try:
                     page_result = self._process_page(
                         image_path,
