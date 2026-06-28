@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import Counter
 import time
 
 from src.image_processor import ImageProcessor
@@ -108,12 +109,6 @@ class OCRPipeline:
                     results['pages'].append(page_result)
                     results['total_records'] += page_result['record_count']
                     
-                    # Insert into database
-                    if not skip_db_insert and self.db_manager:
-                        inserted, skipped = self.db_manager.insert_batch(page_result['records'])
-                        results['records_inserted'] += inserted
-                        results['records_duplicated'] += skipped
-                    
                     json_logger.info(
                         f"Processed page {page_number}",
                         page_number=page_number,
@@ -129,6 +124,14 @@ class OCRPipeline:
             error_msg = f"PDF processing failed: {str(e)}"
             results['errors'].append(error_msg)
             json_logger.error(error_msg, exception=e)
+
+        self._fill_missing_serial_numbers(results['pages'])
+
+        if not skip_db_insert and self.db_manager:
+            for page_result in results['pages']:
+                inserted, skipped = self.db_manager.insert_batch(page_result['records'])
+                results['records_inserted'] += inserted
+                results['records_duplicated'] += skipped
         
         results['processing_time_seconds'] = time.time() - start_time
         json_logger.info(
@@ -139,6 +142,46 @@ class OCRPipeline:
         )
         
         return results
+
+    @staticmethod
+    def _fill_missing_serial_numbers(pages: List[Dict]) -> None:
+        """
+        Fill serial numbers from the card sequence when enough anchors exist.
+
+        Electoral roll cards are printed in strict reading order. OCR often
+        misses the small serial in the card header, so we infer only when the
+        observed records agree on the same sequence offset.
+        """
+        anchors = []
+        for page in pages:
+            for record in page.get('records', []):
+                serial = record.get('serial_number')
+                page_number = record.get('page_number')
+                card_number = record.get('card_number')
+                if not serial or not page_number or not card_number:
+                    continue
+                position = (page_number * 30) + card_number
+                anchors.append(serial - position)
+
+        if not anchors:
+            return
+
+        offsets = Counter(anchors)
+        offset, count = offsets.most_common(1)[0]
+        if count < 2 and len(offsets) > 1:
+            return
+
+        for page in pages:
+            for record in page.get('records', []):
+                if record.get('serial_number'):
+                    continue
+                page_number = record.get('page_number')
+                card_number = record.get('card_number')
+                if not page_number or not card_number:
+                    continue
+                inferred = (page_number * 30) + card_number + offset
+                if 1 <= inferred <= 9999:
+                    record['serial_number'] = inferred
     
     def _process_page(
         self,

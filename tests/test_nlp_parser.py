@@ -36,6 +36,10 @@ class TestNLPParser:
         text = "123 PRI 3186269"
         result = NLPParser.extract_epic_number(text)
         assert result == "PRI3186269"
+
+        text = "EPIC: PR13719739"
+        result = NLPParser.extract_epic_number(text)
+        assert result == "PRI3719739"
     
     def test_extract_gender(self):
         """Test gender extraction"""

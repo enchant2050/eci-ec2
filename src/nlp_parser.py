@@ -58,9 +58,6 @@ class NLPParser:
     }
     
     RELATION_TYPES = {
-        'F': 'Father',
-        'H': 'Husband',
-        'M': 'Mother',
         'FATHER': 'Father',
         'HUSBAND': 'Husband',
         'MOTHER': 'Mother',
@@ -110,6 +107,51 @@ class NLPParser:
         matches = re.findall(r'([A-Z]{3}\d{7})', compact)
         if matches:
             return matches[0]
+
+        for token in re.findall(r'[A-Z0-9]{8,12}', compact):
+            for start in range(0, len(token) - 9):
+                candidate = NLPParser._normalize_epic_candidate(token[start:start + 10])
+                if candidate:
+                    return candidate
+        return None
+
+    @staticmethod
+    def _normalize_epic_candidate(candidate: str) -> Optional[str]:
+        """Correct common OCR substitutions in a possible EPIC number."""
+        if len(candidate) != 10:
+            return None
+
+        letter_map = str.maketrans({
+            '0': 'O',
+            '1': 'I',
+            '5': 'S',
+            '8': 'B',
+            '2': 'Z',
+        })
+        digit_map = str.maketrans({
+            'O': '0',
+            'Q': '0',
+            'D': '0',
+            'I': '1',
+            'L': '1',
+            'T': '1',
+            'S': '5',
+            'B': '8',
+            'Z': '2',
+        })
+
+        prefix_raw = candidate[:3]
+        suffix_raw = candidate[3:]
+        if sum(ch.isalpha() for ch in prefix_raw) < 2:
+            return None
+        if sum(ch.isdigit() for ch in suffix_raw) < 4:
+            return None
+
+        prefix = prefix_raw.translate(letter_map)
+        suffix = suffix_raw.translate(digit_map)
+        normalized = prefix + suffix
+        if re.fullmatch(r'[A-Z]{3}\d{7}', normalized):
+            return normalized
         return None
     
     @staticmethod
@@ -138,8 +180,9 @@ class NLPParser:
         """Extract relation type (Father, Husband, Mother)"""
         text = text.upper().replace("'", "").strip()
         
-        for key, value in NLPParser.RELATION_TYPES.items():
-            if key in text:
+        for key in sorted(NLPParser.RELATION_TYPES, key=len, reverse=True):
+            value = NLPParser.RELATION_TYPES[key]
+            if re.search(r'\b' + re.escape(key) + r'\b', text):
                 return value
         
         # Fuzzy matching
@@ -237,7 +280,7 @@ class NLPParser:
                         record.name = name
                         continue
             
-            if re.search(r'\b(father|husband|mother)', line, re.IGNORECASE):
+            if re.search(r'\b(father|fathers|husband|husbands|mother|mothers|relative)\b', line, re.IGNORECASE):
                 # Relation type
                 rt = NLPParser.extract_relation_type(line)
                 if rt and not record.relation_type:
