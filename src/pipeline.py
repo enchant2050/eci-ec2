@@ -43,6 +43,7 @@ class OCRPipeline:
         skip_db_insert: bool = False,
         start_page: Optional[int] = None,
         end_page: Optional[int] = None,
+        all_pages: bool = False,
     ) -> Dict:
         """
         Process entire PDF document
@@ -53,6 +54,7 @@ class OCRPipeline:
             skip_db_insert: If True, skip database insertion
             start_page: Optional first 1-indexed page to process
             end_page: Optional last 1-indexed page to process
+            all_pages: If True, process cover/map/summary pages too
             
         Returns:
             Dictionary with processing results
@@ -87,14 +89,26 @@ class OCRPipeline:
                 dpi=600
             )
             results['total_pages'] = len(image_paths)
+
+            effective_start_page = start_page
+            effective_end_page = end_page
+            if not all_pages:
+                if effective_start_page is None and len(image_paths) > 2:
+                    effective_start_page = 3
+                if effective_end_page is None and len(image_paths) > 3:
+                    effective_end_page = len(image_paths) - 1
+
+            results['start_page'] = effective_start_page or 1
+            results['end_page'] = effective_end_page or len(image_paths)
             
-            # Step 2-5: Process each page. Non-card pages naturally produce
-            # zero records because card detection returns no boxes.
+            # Step 2-5: Process voter-list pages by default. Electoral roll
+            # PDFs usually have cover/map pages before records and a summary
+            # page at the end; use all_pages or explicit ranges to override.
             for page_num, image_path in enumerate(image_paths):
                 page_number = page_num + 1
-                if start_page and page_number < start_page:
+                if effective_start_page and page_number < effective_start_page:
                     continue
-                if end_page and page_number > end_page:
+                if effective_end_page and page_number > effective_end_page:
                     continue
                 
                 try:

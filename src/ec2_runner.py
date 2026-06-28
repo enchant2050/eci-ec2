@@ -18,6 +18,7 @@ def process_pdf(
     max_workers: int,
     start_page: Optional[int] = None,
     end_page: Optional[int] = None,
+    all_pages: bool = False,
 ) -> dict:
     """Run the OCR pipeline for a single PDF."""
     if not skip_db_insert and not db_connection:
@@ -33,6 +34,7 @@ def process_pdf(
         skip_db_insert=skip_db_insert or not db_connection,
         start_page=start_page,
         end_page=end_page,
+        all_pages=all_pages,
     )
 
     output = Path(output_path)
@@ -75,13 +77,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--start-page",
         type=int,
         default=None,
-        help="First 1-indexed PDF page to process. Defaults to the first page.",
+        help="First 1-indexed PDF page to process. Defaults to page 3 for normal electoral rolls.",
     )
     parser.add_argument(
         "--end-page",
         type=int,
         default=None,
-        help="Last 1-indexed PDF page to process. Defaults to the last page.",
+        help="Last 1-indexed PDF page to process. Defaults to the page before the summary page.",
+    )
+    parser.add_argument(
+        "--all-pages",
+        action="store_true",
+        help="Process every PDF page, including cover/map/summary pages.",
     )
     return parser
 
@@ -97,6 +104,7 @@ def main() -> int:
         max_workers=args.max_workers,
         start_page=args.start_page,
         end_page=args.end_page,
+        all_pages=args.all_pages,
     )
     return 0
 
