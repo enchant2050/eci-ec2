@@ -28,6 +28,7 @@ def test_process_pdf_defaults_to_voter_pages(monkeypatch, tmp_path):
     def fake_convert_pdf_to_images(pdf_path, output_dir, dpi, first_page=None, last_page=None):
         conversion_args["first_page"] = first_page
         conversion_args["last_page"] = last_page
+        conversion_args["dpi"] = dpi
         return [f"{output_dir}/page_{page:04d}.jpg" for page in range(first_page, last_page + 1)]
 
     def fake_process_page(self, image_path, page_number, pdf_name, work_dir):
@@ -46,7 +47,7 @@ def test_process_pdf_defaults_to_voter_pages(monkeypatch, tmp_path):
     result = OCRPipeline().process_pdf(str(tmp_path / "sample.pdf"))
 
     assert processed_pages == [3, 4, 5, 6, 7, 8, 9]
-    assert conversion_args == {"first_page": 3, "last_page": 9}
+    assert conversion_args == {"first_page": 3, "last_page": 9, "dpi": 300}
     assert result["start_page"] == 3
     assert result["end_page"] == 9
 
@@ -58,6 +59,7 @@ def test_process_pdf_converts_only_explicit_page_range(monkeypatch, tmp_path):
     def fake_convert_pdf_to_images(pdf_path, output_dir, dpi, first_page=None, last_page=None):
         conversion_args["first_page"] = first_page
         conversion_args["last_page"] = last_page
+        conversion_args["dpi"] = dpi
         return [f"{output_dir}/page_{page:04d}.jpg" for page in range(first_page, last_page + 1)]
 
     def fake_process_page(self, image_path, page_number, pdf_name, work_dir):
@@ -80,6 +82,6 @@ def test_process_pdf_converts_only_explicit_page_range(monkeypatch, tmp_path):
     )
 
     assert processed_pages == [3]
-    assert conversion_args == {"first_page": 3, "last_page": 3}
+    assert conversion_args == {"first_page": 3, "last_page": 3, "dpi": 300}
     assert result["start_page"] == 3
     assert result["end_page"] == 3

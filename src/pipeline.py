@@ -24,9 +24,10 @@ class OCRPipeline:
     def __init__(
         self,
         db_connection_string: Optional[str] = None,
-        max_workers: int = 4,
+        max_workers: int = 1,
         exhaustive_ocr: bool = False,
         ocr_timeout: int = 15,
+        dpi: int = 300,
     ):
         """
         Initialize pipeline
@@ -36,6 +37,7 @@ class OCRPipeline:
             max_workers: Number of parallel workers for card OCR
             exhaustive_ocr: Run slower multi-pass OCR for each card
             ocr_timeout: Max seconds per Tesseract call
+            dpi: PDF rasterization DPI
         """
         self.db_manager = None
         if db_connection_string:
@@ -45,6 +47,7 @@ class OCRPipeline:
         self.max_workers = max_workers
         self.exhaustive_ocr = exhaustive_ocr
         self.ocr_timeout = ocr_timeout
+        self.dpi = dpi
     
     def process_pdf(
         self,
@@ -115,7 +118,7 @@ class OCRPipeline:
             image_paths = ImageProcessor.convert_pdf_to_images(
                 str(pdf_path),
                 str(pages_dir),
-                dpi=600,
+                dpi=self.dpi,
                 first_page=results['start_page'],
                 last_page=results['end_page'],
             )
@@ -266,6 +269,13 @@ class OCRPipeline:
     ) -> List[Dict]:
         """Process cards in parallel"""
         records = []
+
+        if self.max_workers <= 1:
+            for idx, card_path in enumerate(card_paths, 1):
+                record = self._ocr_and_parse_card(card_path, idx, page_number, pdf_name)
+                if record:
+                    records.append(record)
+            return records
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {

@@ -19,3 +19,15 @@ def test_extract_text_uses_tesseract_conf_key(monkeypatch):
 
     assert text == "Name: TEST VOTER"
     assert confidence == 87.75
+
+
+def test_text_from_data_reconstructs_lines():
+    data = {
+        "text": ["Name:", "TEST", "VOTER", "", "Age:", "45"],
+        "block_num": [1, 1, 1, 1, 1, 1],
+        "par_num": [1, 1, 1, 1, 1, 1],
+        "line_num": [1, 1, 1, 1, 2, 2],
+        "word_num": [1, 2, 3, 4, 1, 2],
+    }
+
+    assert OCREngine._text_from_data(data) == "Name: TEST VOTER\nAge: 45"
