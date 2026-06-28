@@ -19,6 +19,8 @@ def process_pdf(
     start_page: Optional[int] = None,
     end_page: Optional[int] = None,
     all_pages: bool = False,
+    exhaustive_ocr: bool = False,
+    ocr_timeout: int = 15,
 ) -> dict:
     """Run the OCR pipeline for a single PDF."""
     if not skip_db_insert and not db_connection:
@@ -27,6 +29,8 @@ def process_pdf(
     pipeline = OCRPipeline(
         db_connection_string=None if skip_db_insert else db_connection,
         max_workers=max_workers,
+        exhaustive_ocr=exhaustive_ocr,
+        ocr_timeout=ocr_timeout,
     )
     result = pipeline.process_pdf(
         pdf_path,
@@ -90,6 +94,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Process every PDF page, including cover/map/summary pages.",
     )
+    parser.add_argument(
+        "--exhaustive-ocr",
+        action="store_true",
+        default=os.environ.get("OCR_EXHAUSTIVE", "0").lower() in {"1", "true", "yes"},
+        help="Run slower multi-pass OCR for harder scans.",
+    )
+    parser.add_argument(
+        "--ocr-timeout",
+        type=int,
+        default=int(os.environ.get("OCR_TIMEOUT_SECONDS", "15")),
+        help="Maximum seconds for each Tesseract call.",
+    )
     return parser
 
 
@@ -105,6 +121,8 @@ def main() -> int:
         start_page=args.start_page,
         end_page=args.end_page,
         all_pages=args.all_pages,
+        exhaustive_ocr=args.exhaustive_ocr,
+        ocr_timeout=args.ocr_timeout,
     )
     return 0
 

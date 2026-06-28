@@ -13,6 +13,9 @@ class OCREngine:
     
     # Tesseract configuration
     CUSTOM_CONFIG = r'--oem 3 --psm 6'
+    FAST_OCR_CONFIGS = (
+        r'--oem 3 --psm 6',
+    )
     OCR_CONFIGS = (
         r'--oem 3 --psm 6',
         r'--oem 3 --psm 4',
@@ -21,13 +24,20 @@ class OCREngine:
     LANGUAGES = ['eng']  # Add support for Indian languages later
     
     @staticmethod
-    def extract_text(image_path: str, language: str = 'eng') -> Tuple[str, float]:
+    def extract_text(
+        image_path: str,
+        language: str = 'eng',
+        exhaustive: bool = False,
+        timeout: int = 15,
+    ) -> Tuple[str, float]:
         """
         Extract text from image using Tesseract 5
         
         Args:
             image_path: Path to voter card image
             language: Language code (eng, hin, mar, etc.)
+            exhaustive: Run slower multi-pass OCR for harder cards
+            timeout: Max seconds for each Tesseract call
             
         Returns:
             Tuple of (extracted_text, average_confidence)
@@ -39,9 +49,10 @@ class OCREngine:
                 lang_config = f'eng+{language}'
             
             attempts = []
-            for image in OCREngine._image_variants(image_path):
-                for config in OCREngine.OCR_CONFIGS:
-                    text, confidence = OCREngine._run_tesseract(image, lang_config, config)
+            configs = OCREngine.OCR_CONFIGS if exhaustive else OCREngine.FAST_OCR_CONFIGS
+            for image in OCREngine._image_variants(image_path, exhaustive=exhaustive):
+                for config in configs:
+                    text, confidence = OCREngine._run_tesseract(image, lang_config, config, timeout)
                     if text:
                         attempts.append((text, confidence))
 
@@ -57,13 +68,16 @@ class OCREngine:
             return "", 0.0
 
     @staticmethod
-    def _image_variants(image_path: str) -> List:
+    def _image_variants(image_path: str, exhaustive: bool = False) -> List:
         """Build OCR-friendly card image variants without writing temp files."""
         image = cv2.imread(image_path)
         if image is None:
             return [image_path]
 
         variants = [image]
+        if not exhaustive:
+            return variants
+
         scale = 2
         enlarged = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         variants.append(enlarged)
@@ -82,19 +96,51 @@ class OCREngine:
         return variants
 
     @staticmethod
-    def _run_tesseract(image, lang_config: str, config: str) -> Tuple[str, float]:
-        data = pytesseract.image_to_data(
-            image,
-            lang=lang_config,
-            config=config,
-            output_type=Output.DICT
-        )
-        text = pytesseract.image_to_string(
-            image,
-            lang=lang_config,
-            config=config
-        )
-        return text.strip(), OCREngine._average_confidence(data)
+    def _run_tesseract(image, lang_config: str, config: str, timeout: int) -> Tuple[str, float]:
+        try:
+            data = pytesseract.image_to_data(
+                image,
+                lang=lang_config,
+                config=config,
+                output_type=Output.DICT,
+                timeout=timeout,
+            )
+            text = OCREngine._text_from_data(data)
+            return text.strip(), OCREngine._average_confidence(data)
+        except RuntimeError as e:
+            logger.warning("Tesseract timed out or failed: %s", str(e))
+            return "", 0.0
+
+    @staticmethod
+    def _text_from_data(data: Dict) -> str:
+        """Reconstruct line text from image_to_data output."""
+        rows = []
+        total = len(data.get('text', []))
+        for i in range(total):
+            text = data['text'][i].strip()
+            if not text:
+                continue
+            rows.append((
+                int(data.get('block_num', [0] * total)[i]),
+                int(data.get('par_num', [0] * total)[i]),
+                int(data.get('line_num', [0] * total)[i]),
+                int(data.get('word_num', [0] * total)[i]),
+                text,
+            ))
+
+        lines = []
+        current_key = None
+        current_words = []
+        for block, paragraph, line, _word, text in sorted(rows):
+            key = (block, paragraph, line)
+            if current_key is not None and key != current_key:
+                lines.append(" ".join(current_words))
+                current_words = []
+            current_key = key
+            current_words.append(text)
+        if current_words:
+            lines.append(" ".join(current_words))
+        return "\n".join(lines)
 
     @staticmethod
     def _average_confidence(data: Dict) -> float:

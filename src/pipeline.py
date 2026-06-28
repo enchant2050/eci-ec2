@@ -21,13 +21,21 @@ logger = logging.getLogger(__name__)
 class OCRPipeline:
     """Complete OCR processing pipeline"""
     
-    def __init__(self, db_connection_string: Optional[str] = None, max_workers: int = 4):
+    def __init__(
+        self,
+        db_connection_string: Optional[str] = None,
+        max_workers: int = 4,
+        exhaustive_ocr: bool = False,
+        ocr_timeout: int = 15,
+    ):
         """
         Initialize pipeline
         
         Args:
             db_connection_string: PostgreSQL connection string
             max_workers: Number of parallel workers for card OCR
+            exhaustive_ocr: Run slower multi-pass OCR for each card
+            ocr_timeout: Max seconds per Tesseract call
         """
         self.db_manager = None
         if db_connection_string:
@@ -35,6 +43,8 @@ class OCRPipeline:
             self.db_manager.create_tables()
         
         self.max_workers = max_workers
+        self.exhaustive_ocr = exhaustive_ocr
+        self.ocr_timeout = ocr_timeout
     
     def process_pdf(
         self,
@@ -230,6 +240,11 @@ class OCRPipeline:
         
         boxes = CardDetector.detect_cards(str(enhanced_path))
         card_paths = CardDetector.crop_cards(str(enhanced_path), boxes, str(cards_dir))
+        json_logger.info(
+            "Detected card crops",
+            page_number=page_number,
+            cards=len(card_paths),
+        )
         
         # Step 4-5: OCR and parse cards (parallel)
         page_result['records'] = self._process_cards_parallel(
@@ -278,7 +293,18 @@ class OCRPipeline:
         """OCR and parse single card"""
         try:
             # Step 4: OCR
-            text, confidence = OCREngine.extract_text(card_path, language='eng')
+            json_logger.info(
+                "OCR card started",
+                page_number=page_number,
+                card_number=card_number,
+                exhaustive_ocr=self.exhaustive_ocr,
+            )
+            text, confidence = OCREngine.extract_text(
+                card_path,
+                language='eng',
+                exhaustive=self.exhaustive_ocr,
+                timeout=self.ocr_timeout,
+            )
             
             if not text or confidence < 20:
                 json_logger.warning(
