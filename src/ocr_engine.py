@@ -14,12 +14,12 @@ class OCREngine:
     # Tesseract configuration
     CUSTOM_CONFIG = r'--oem 3 --psm 6'
     FAST_OCR_CONFIGS = (
-        r'--oem 3 --psm 6',
+        r'--oem 3 --psm 6 -c preserve_interword_spaces=1',
     )
     OCR_CONFIGS = (
-        r'--oem 3 --psm 6',
-        r'--oem 3 --psm 4',
-        r'--oem 3 --psm 11',
+        r'--oem 3 --psm 6 -c preserve_interword_spaces=1',
+        r'--oem 3 --psm 4 -c preserve_interword_spaces=1',
+        r'--oem 3 --psm 11 -c preserve_interword_spaces=1',
     )
     LANGUAGES = ['eng']  # Add support for Indian languages later
     
@@ -75,6 +75,8 @@ class OCREngine:
             return [image_path]
 
         variants = [image]
+        prepared = OCREngine._prepare_card_for_ocr(image)
+        variants.append(prepared)
         if not exhaustive:
             return variants
 
@@ -94,6 +96,32 @@ class OCREngine:
         )
         variants.append(threshold)
         return variants
+
+    @staticmethod
+    def _prepare_card_for_ocr(image):
+        """Mask photo/noise area and enhance text for ECI voter card OCR."""
+        h, w = image.shape[:2]
+        prepared = image.copy()
+
+        # Keep the header where serial/EPIC often sit, but remove the photo
+        # block in the right side of the card body.
+        photo_x = int(w * 0.72)
+        photo_y = int(h * 0.24)
+        prepared[photo_y:h, photo_x:w] = 255
+
+        gray = cv2.cvtColor(prepared, cv2.COLOR_BGR2GRAY)
+        gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        gray = cv2.fastNlMeansDenoising(gray, h=7)
+        gray = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
+        threshold = cv2.adaptiveThreshold(
+            gray,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            blockSize=35,
+            C=11,
+        )
+        return threshold
 
     @staticmethod
     def _run_tesseract(image, lang_config: str, config: str, timeout: int) -> Tuple[str, float]:
@@ -164,6 +192,7 @@ class OCREngine:
         for text in texts:
             for line in text.splitlines():
                 normalized = ' '.join(line.split())
+                normalized = OCREngine._drop_card_noise(normalized)
                 if not normalized:
                     continue
                 key = normalized.lower()
@@ -172,6 +201,11 @@ class OCREngine:
                 seen.add(key)
                 lines.append(normalized)
         return "\n".join(lines)
+
+    @staticmethod
+    def _drop_card_noise(line: str) -> str:
+        """Remove repeated non-data text printed in photo placeholders."""
+        return line if "photo available" not in line.lower() else ""
     
     @staticmethod
     def extract_text_regions(
