@@ -16,8 +16,13 @@ def process_pdf(
     db_connection: Optional[str],
     skip_db_insert: bool,
     max_workers: int,
+    start_page: Optional[int] = None,
+    end_page: Optional[int] = None,
 ) -> dict:
     """Run the OCR pipeline for a single PDF."""
+    if not skip_db_insert and not db_connection:
+        json_logger.warning("DATABASE_URL is not set; processing JSON only and skipping database insert")
+
     pipeline = OCRPipeline(
         db_connection_string=None if skip_db_insert else db_connection,
         max_workers=max_workers,
@@ -26,6 +31,8 @@ def process_pdf(
         pdf_path,
         work_dir=work_dir,
         skip_db_insert=skip_db_insert or not db_connection,
+        start_page=start_page,
+        end_page=end_page,
     )
 
     output = Path(output_path)
@@ -64,6 +71,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=int(os.environ.get("OCR_MAX_WORKERS", "4")),
         help="Number of parallel OCR workers",
     )
+    parser.add_argument(
+        "--start-page",
+        type=int,
+        default=None,
+        help="First 1-indexed PDF page to process. Defaults to the first page.",
+    )
+    parser.add_argument(
+        "--end-page",
+        type=int,
+        default=None,
+        help="Last 1-indexed PDF page to process. Defaults to the last page.",
+    )
     return parser
 
 
@@ -76,6 +95,8 @@ def main() -> int:
         db_connection=args.db_url,
         skip_db_insert=args.skip_db,
         max_workers=args.max_workers,
+        start_page=args.start_page,
+        end_page=args.end_page,
     )
     return 0
 

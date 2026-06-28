@@ -54,3 +54,29 @@ class TestCardDetector:
         
         # Should be ordered left to right
         assert organized[0][0] < organized[1][0] < organized[2][0]
+
+    def test_detect_landscape_card_grid(self, tmp_path):
+        """Test detection of a standard 3x10 landscape card grid."""
+        image = np.ones((1200, 900, 3), dtype=np.uint8) * 255
+        x1, y1 = 60, 120
+        cell_w, cell_h = 260, 90
+
+        for row in range(CardDetector.EXPECTED_ROWS):
+            for col in range(CardDetector.EXPECTED_COLS):
+                left = x1 + col * cell_w
+                top = y1 + row * cell_h
+                cv2.rectangle(
+                    image,
+                    (left, top),
+                    (left + cell_w - 8, top + cell_h - 8),
+                    (0, 0, 0),
+                    2,
+                )
+
+        path = tmp_path / "page.jpg"
+        cv2.imwrite(str(path), image)
+
+        boxes = CardDetector.detect_cards(str(path))
+
+        assert len(boxes) == CardDetector.EXPECTED_ROWS * CardDetector.EXPECTED_COLS
+        assert boxes[0][2] > boxes[0][3]

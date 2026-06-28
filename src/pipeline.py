@@ -39,7 +39,9 @@ class OCRPipeline:
         self,
         pdf_path: str,
         work_dir: str = "/tmp/electoral_roll_ocr",
-        skip_db_insert: bool = False
+        skip_db_insert: bool = False,
+        start_page: Optional[int] = None,
+        end_page: Optional[int] = None,
     ) -> Dict:
         """
         Process entire PDF document
@@ -48,6 +50,8 @@ class OCRPipeline:
             pdf_path: Path to input PDF
             work_dir: Working directory for temporary files
             skip_db_insert: If True, skip database insertion
+            start_page: Optional first 1-indexed page to process
+            end_page: Optional last 1-indexed page to process
             
         Returns:
             Dictionary with processing results
@@ -65,6 +69,7 @@ class OCRPipeline:
             'total_records': 0,
             'records_inserted': 0,
             'records_duplicated': 0,
+            'database_enabled': bool(self.db_manager and not skip_db_insert),
             'errors': [],
             'pages': []
         }
@@ -82,16 +87,19 @@ class OCRPipeline:
             )
             results['total_pages'] = len(image_paths)
             
-            # Step 2-5: Process each page (skip first 2 pages and last page)
+            # Step 2-5: Process each page. Non-card pages naturally produce
+            # zero records because card detection returns no boxes.
             for page_num, image_path in enumerate(image_paths):
-                # Skip metadata (page 1), maps (page 2), and summary (last page)
-                if page_num < 2 or page_num == len(image_paths) - 1:
+                page_number = page_num + 1
+                if start_page and page_number < start_page:
+                    continue
+                if end_page and page_number > end_page:
                     continue
                 
                 try:
                     page_result = self._process_page(
                         image_path,
-                        page_num + 1,  # 1-indexed
+                        page_number,
                         pdf_name,
                         work_dir
                     )
@@ -107,15 +115,15 @@ class OCRPipeline:
                         results['records_duplicated'] += skipped
                     
                     json_logger.info(
-                        f"Processed page {page_num + 1}",
-                        page_number=page_num + 1,
+                        f"Processed page {page_number}",
+                        page_number=page_number,
                         records=page_result['record_count']
                     )
                     
                 except Exception as e:
-                    error_msg = f"Error processing page {page_num + 1}: {str(e)}"
+                    error_msg = f"Error processing page {page_number}: {str(e)}"
                     results['errors'].append(error_msg)
-                    json_logger.error(error_msg, page_number=page_num + 1, exception=e)
+                    json_logger.error(error_msg, page_number=page_number, exception=e)
         
         except Exception as e:
             error_msg = f"PDF processing failed: {str(e)}"
@@ -197,7 +205,7 @@ class OCRPipeline:
                 except Exception as e:
                     json_logger.error(f"Card processing error: {str(e)}", exception=e)
         
-        return records
+        return sorted(records, key=lambda record: record.get('card_number') or 0)
     
     def _ocr_and_parse_card(
         self,

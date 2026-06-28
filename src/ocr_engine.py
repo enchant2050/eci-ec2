@@ -48,8 +48,16 @@ class OCREngine:
                 config=OCREngine.CUSTOM_CONFIG
             )
             
-            # Calculate average confidence (filtering out -1 values)
-            confidences = [int(conf) for conf in data['confidence'] if int(conf) > 0]
+            # Tesseract returns confidence values under the "conf" key. Values
+            # can be "-1" or decimal strings depending on the installed build.
+            confidences = []
+            for conf in data.get('conf', []):
+                try:
+                    value = float(conf)
+                except (TypeError, ValueError):
+                    continue
+                if value > 0:
+                    confidences.append(value)
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0
             
             return text.strip(), avg_confidence
@@ -85,9 +93,13 @@ class OCREngine:
             for i in range(len(data['text'])):
                 text = data['text'][i].strip()
                 if text:
+                    try:
+                        confidence = float(data['conf'][i])
+                    except (TypeError, ValueError):
+                        confidence = 0.0
                     results.append({
                         'text': text,
-                        'confidence': int(data['conf'][i]),
+                        'confidence': confidence,
                         'bbox': {
                             'x': int(data['left'][i]),
                             'y': int(data['top'][i]),

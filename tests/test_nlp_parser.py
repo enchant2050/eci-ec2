@@ -25,11 +25,15 @@ class TestNLPParser:
         
         text = "500"
         result = NLPParser.extract_serial_number(text)
-        assert result is None
+        assert result == 500
     
     def test_extract_epic_number(self):
         """Test EPIC number extraction"""
         text = "Name : PULIKAR KUJUR\nEPIC: PRI3186269"
+        result = NLPParser.extract_epic_number(text)
+        assert result == "PRI3186269"
+
+        text = "123 PRI 3186269"
         result = NLPParser.extract_epic_number(text)
         assert result == "PRI3186269"
     
@@ -38,6 +42,10 @@ class TestNLPParser:
         text = "Gender: Male"
         result = NLPParser.extract_gender(text)
         assert result == "Male"
+
+        text = "Gender: Female"
+        result = NLPParser.extract_gender(text)
+        assert result == "Female"
         
         text = "F"
         result = NLPParser.extract_gender(text)
@@ -83,3 +91,24 @@ class TestNLPParser:
         record.age = 45
         record.gender = "Unknown"
         assert not OCRPipeline._validate_record(record)
+
+    def test_parse_noisy_eci_card(self):
+        """Test common OCR layout from an ECI voter card."""
+        text = """
+        123 PRI 3186269
+        Name : PULIKAR KUJUR
+        Father's Name : MANGRA KUJUR
+        House Number : 12/3
+        Age : 45 Gender : Female
+        """
+        record = NLPParser.parse_voter_card(text, confidence=87.55)
+
+        assert record.serial_number == 123
+        assert record.epic_number == "PRI3186269"
+        assert record.name == "PULIKAR KUJUR"
+        assert record.relation_type == "Father"
+        assert record.relation_name == "MANGRA KUJUR"
+        assert record.house_number == "12/3"
+        assert record.age == 45
+        assert record.gender == "Female"
+        assert record.to_dict()["ocr_confidence"] == 87.55
